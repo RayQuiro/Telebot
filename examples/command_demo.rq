@@ -1,4 +1,4 @@
-from "../togithub/Telebot/main.rq" import token_from_env, bot, on_command, on_button_command, on_callback, on_document_command, on_message, run_polling;
+from telebot import token_from_env, bot, on_command, on_button_command, on_callback, on_document_command, on_message, run_polling;
 
 var token = token_from_env("TELEGRAM_BOT_TOKEN");
 var app = bot(token, "build/telebot_demo");
