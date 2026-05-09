@@ -1,0 +1,56 @@
+fn api_root(token) {
+    return "https://api.telegram.org/bot" + token;
+}
+
+fn file_root(token) {
+    return "https://api.telegram.org/file/bot" + token;
+}
+
+fn method_url(token, method) {
+    return api_root(token) + "/" + method;
+}
+
+fn file_url(token, telegram_path) {
+    return file_root(token) + "/" + telegram_path;
+}
+
+fn clean_cli_text(value) {
+    var text = replace(str(value), "\"", "'");
+    text = replace(text, "\n", " ");
+    return text;
+}
+
+fn clean_cli_path(value) {
+    return replace(str(value), "\"", "");
+}
+
+fn post_command(token, method, params) {
+    var command = "curl.exe -s -X POST \"" + method_url(token, method) + "\"";
+    for (var i = 0; i < len(params); i = i + 2) {
+        command = command + " --data-urlencode \"" + clean_cli_text(params[i]) + "=" + clean_cli_text(params[i + 1]) + "\"";
+    }
+    return command;
+}
+
+fn multipart_command(token, method, parts) {
+    var command = "curl.exe -s -X POST \"" + method_url(token, method) + "\"";
+    for (var i = 0; i < len(parts); i = i + 3) {
+        var field = clean_cli_text(parts[i]);
+        var value = str(parts[i + 1]);
+        var kind = str(parts[i + 2]);
+        if (kind == "file") {
+            command = command + " -F \"" + field + "=@" + clean_cli_path(value) + "\"";
+        } else {
+            command = command + " -F \"" + field + "=" + clean_cli_text(value) + "\"";
+        }
+    }
+    return command;
+}
+
+fn get_json_command(url, output_path) {
+    return "curl.exe -s \"" + clean_cli_text(url) + "\" -o \"" + clean_cli_path(output_path) + "\"";
+}
+
+fn post_json_command(token, method, params, output_path) {
+    return post_command(token, method, params) + " -o \"" + clean_cli_path(output_path) + "\"";
+}

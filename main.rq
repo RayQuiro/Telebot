@@ -1,0 +1,464 @@
+from rayquiro.process import run;
+from rayquiro.env import get;
+from rayquiro.fs import write, read, exists, mkdir;
+
+var framework_name = "telebot";
+var framework_version = "0.0.1";
+
+fn token_from_env(env_name) {
+    return get(env_name);
+}
+
+fn api_root(token) {
+    return "https://api.telegram.org/bot" + token;
+}
+
+fn file_root(token) {
+    return "https://api.telegram.org/file/bot" + token;
+}
+
+fn method_url(token, method) {
+    return api_root(token) + "/" + method;
+}
+
+fn file_url(token, telegram_file_path) {
+    return file_root(token) + "/" + telegram_file_path;
+}
+
+fn chat(chat_id) {
+    return str(chat_id);
+}
+
+fn clean_cli_text(value) {
+    var text = replace(str(value), "\"", "'");
+    text = replace(text, "\n", " ");
+    return text;
+}
+
+fn clean_cli_path(value) {
+    return replace(str(value), "\"", "");
+}
+
+fn post_command(token, method, params) {
+    var command = "curl.exe -s -X POST \"" + method_url(token, method) + "\"";
+    for (var i = 0; i < len(params); i = i + 2) {
+        command = command + " --data-urlencode \"" + clean_cli_text(params[i]) + "=" + clean_cli_text(params[i + 1]) + "\"";
+    }
+    return command;
+}
+
+fn multipart_command(token, method, parts) {
+    var command = "curl.exe -s -X POST \"" + method_url(token, method) + "\"";
+    for (var i = 0; i < len(parts); i = i + 3) {
+        var field = clean_cli_text(parts[i]);
+        var value = str(parts[i + 1]);
+        var kind = str(parts[i + 2]);
+        if (kind == "file") {
+            command = command + " -F \"" + field + "=@" + clean_cli_path(value) + "\"";
+        } else {
+            command = command + " -F \"" + field + "=" + clean_cli_text(value) + "\"";
+        }
+    }
+    return command;
+}
+
+fn get_json_command(url, output_path) {
+    return "curl.exe -s \"" + clean_cli_text(url) + "\" -o \"" + clean_cli_path(output_path) + "\"";
+}
+
+fn post_json_command(token, method, params, output_path) {
+    return post_command(token, method, params) + " -o \"" + clean_cli_path(output_path) + "\"";
+}
+
+fn send_message_cmd(token, chat_id, text) {
+    return post_command(token, "sendMessage", ["chat_id", chat(chat_id), "text", text]);
+}
+
+fn send_html_cmd(token, chat_id, html) {
+    return post_command(token, "sendMessage", [
+        "chat_id", chat(chat_id),
+        "text", html,
+        "parse_mode", "HTML"
+    ]);
+}
+
+fn send_markdown_cmd(token, chat_id, text) {
+    return post_command(token, "sendMessage", [
+        "chat_id", chat(chat_id),
+        "text", text,
+        "parse_mode", "MarkdownV2"
+    ]);
+}
+
+fn reply_cmd(token, chat_id, reply_to_message_id, text) {
+    return post_command(token, "sendMessage", [
+        "chat_id", chat(chat_id),
+        "text", text,
+        "reply_to_message_id", str(reply_to_message_id)
+    ]);
+}
+
+fn send_photo_cmd(token, chat_id, file_path, caption) {
+    return multipart_command(token, "sendPhoto", [
+        "chat_id", chat(chat_id), "text",
+        "photo", file_path, "file",
+        "caption", caption, "text"
+    ]);
+}
+
+fn send_document_cmd(token, chat_id, file_path, caption) {
+    return multipart_command(token, "sendDocument", [
+        "chat_id", chat(chat_id), "text",
+        "document", file_path, "file",
+        "caption", caption, "text"
+    ]);
+}
+
+fn answer_callback_cmd(token, callback_id, text) {
+    return post_command(token, "answerCallbackQuery", [
+        "callback_query_id", callback_id,
+        "text", text
+    ]);
+}
+
+fn send_buttons_cmd(token, chat_id, text, reply_markup_json) {
+    return post_command(token, "sendMessage", [
+        "chat_id", chat(chat_id),
+        "text", text,
+        "reply_markup", reply_markup_json
+    ]);
+}
+
+fn set_webhook_cmd(token, webhook_url) {
+    return post_command(token, "setWebhook", ["url", webhook_url]);
+}
+
+fn delete_webhook_cmd(token) {
+    return post_command(token, "deleteWebhook", []);
+}
+
+fn get_me_cmd(token, output_path) {
+    return get_json_command(method_url(token, "getMe"), output_path);
+}
+
+fn get_updates_cmd(token, offset, timeout_seconds, output_path) {
+    var url = method_url(token, "getUpdates");
+    url = url + "?offset=" + str(offset);
+    url = url + "&timeout=" + str(timeout_seconds);
+    return get_json_command(url, output_path);
+}
+
+fn get_file_cmd(token, file_id, output_path) {
+    return post_json_command(token, "getFile", ["file_id", file_id], output_path);
+}
+
+fn download_file_cmd(token, telegram_file_path, output_path) {
+    return get_json_command(file_url(token, telegram_file_path), output_path);
+}
+
+fn send_message(token, chat_id, text) {
+    return run(send_message_cmd(token, chat_id, text));
+}
+
+fn send_html(token, chat_id, html) {
+    return run(send_html_cmd(token, chat_id, html));
+}
+
+fn send_markdown(token, chat_id, text) {
+    return run(send_markdown_cmd(token, chat_id, text));
+}
+
+fn reply(token, chat_id, reply_to_message_id, text) {
+    return run(reply_cmd(token, chat_id, reply_to_message_id, text));
+}
+
+fn send_photo(token, chat_id, file_path, caption) {
+    return run(send_photo_cmd(token, chat_id, file_path, caption));
+}
+
+fn send_document(token, chat_id, file_path, caption) {
+    return run(send_document_cmd(token, chat_id, file_path, caption));
+}
+
+fn answer_callback(token, callback_id, text) {
+    return run(answer_callback_cmd(token, callback_id, text));
+}
+
+fn send_buttons(token, chat_id, text, reply_markup_json) {
+    return run(send_buttons_cmd(token, chat_id, text, reply_markup_json));
+}
+
+fn set_webhook(token, webhook_url) {
+    return run(set_webhook_cmd(token, webhook_url));
+}
+
+fn delete_webhook(token) {
+    return run(delete_webhook_cmd(token));
+}
+
+fn get_me(token, output_path) {
+    return run(get_me_cmd(token, output_path));
+}
+
+fn get_updates(token, offset, timeout_seconds, output_path) {
+    return run(get_updates_cmd(token, offset, timeout_seconds, output_path));
+}
+
+fn get_file(token, file_id, output_path) {
+    return run(get_file_cmd(token, file_id, output_path));
+}
+
+fn download_file(token, telegram_file_path, output_path) {
+    return run(download_file_cmd(token, telegram_file_path, output_path));
+}
+
+fn write_poll_script(token, offset, timeout_seconds, output_path, script_path) {
+    var script = "@echo off\n";
+    script = script + get_updates_cmd(token, offset, timeout_seconds, output_path) + "\n";
+    return write(script_path, script);
+}
+
+fn read_or_empty(path) {
+    if (exists(path)) {
+        return read(path);
+    }
+    return "";
+}
+
+fn ensure_dir(path) {
+    if (!exists(path)) {
+        mkdir(path);
+    }
+    return path;
+}
+
+fn append_text(path, text) {
+    var current = read_or_empty(path);
+    return write(path, current + text);
+}
+
+fn record_escape(value) {
+    var text = str(value);
+    text = replace(text, "\n", "\\n");
+    text = replace(text, "|~|", " ");
+    return text;
+}
+
+fn bot(token, root_dir) {
+    var root = str(root_dir);
+    ensure_dir(root);
+    ensure_dir(root + "/data");
+    write(root + "/token.txt", str(token));
+    if (!exists(root + "/handlers.rqtb")) {
+        write(root + "/handlers.rqtb", "");
+    }
+    if (!exists(root + "/commands.rqtb")) {
+        write(root + "/commands.rqtb", "");
+    }
+    if (!exists(root + "/state.offset")) {
+        write(root + "/state.offset", "0");
+    }
+    return root;
+}
+
+fn bot_default(token) {
+    return bot(token, "build/telebot");
+}
+
+fn command_name(value) {
+    var name = str(value);
+    if (len(name) > 0 && name[0] == "/") {
+        return slice(name, 1, len(name));
+    }
+    return name;
+}
+
+fn describe_command(root, command, description) {
+    return append_text(root + "/commands.rqtb", record_escape(command_name(command)) + "|~|" + record_escape(description) + "\n");
+}
+
+fn register_handler(root, kind, key, action, arg1, arg2) {
+    var line = record_escape(kind) + "|~|" + record_escape(key) + "|~|" + record_escape(action) + "|~|" + record_escape(arg1) + "|~|" + record_escape(arg2) + "\n";
+    return append_text(root + "/handlers.rqtb", line);
+}
+
+fn on_command(root, command, text) {
+    register_handler(root, "command", command, "send", text, "");
+    return describe_command(root, command, "Command " + command);
+}
+
+fn on_command_html(root, command, html) {
+    register_handler(root, "command", command, "html", html, "");
+    return describe_command(root, command, "Command " + command);
+}
+
+fn on_command_markdown(root, command, text) {
+    register_handler(root, "command", command, "markdown", text, "");
+    return describe_command(root, command, "Command " + command);
+}
+
+fn on_message(root, text) {
+    return register_handler(root, "message", "*", "send", text, "");
+}
+
+fn on_callback(root, callback_data, text) {
+    return register_handler(root, "callback", callback_data, "send", text, "");
+}
+
+fn on_photo_command(root, command, file_path, caption) {
+    register_handler(root, "command", command, "photo", file_path, caption);
+    return describe_command(root, command, "Photo " + command);
+}
+
+fn on_document_command(root, command, file_path, caption) {
+    register_handler(root, "command", command, "document", file_path, caption);
+    return describe_command(root, command, "Document " + command);
+}
+
+fn on_button_command(root, command, text, buttons_spec) {
+    register_handler(root, "command", command, "buttons", text, buttons_spec);
+    return describe_command(root, command, "Buttons " + command);
+}
+
+fn bot_host_script() {
+    var script = "$ErrorActionPreference = 'Stop'\n";
+    script = script + "$Root = Split-Path -Parent $MyInvocation.MyCommand.Path\n";
+    script = script + "$TokenPath = Join-Path $Root 'token.txt'\n";
+    script = script + "$HandlersPath = Join-Path $Root 'handlers.rqtb'\n";
+    script = script + "$CommandsPath = Join-Path $Root 'commands.rqtb'\n";
+    script = script + "$OffsetPath = Join-Path $Root 'state.offset'\n";
+    script = script + "$StopPath = Join-Path $Root 'stop.txt'\n";
+    script = script + "$Token = (Get-Content $TokenPath -Raw).Trim()\n";
+    script = script + "function Unescape-Field($value) { return ($value -replace '\\\\n', \"`n\") }\n";
+    script = script + "function Parse-Handlers() {\n";
+    script = script + "  if (!(Test-Path $HandlersPath)) { return @() }\n";
+    script = script + "  $items = @()\n";
+    script = script + "  foreach ($line in Get-Content $HandlersPath) {\n";
+    script = script + "    if ([string]::IsNullOrWhiteSpace($line)) { continue }\n";
+    script = script + "    $parts = $line -split '\\|~\\|', 5\n";
+    script = script + "    while ($parts.Count -lt 5) { $parts += '' }\n";
+    script = script + "    $items += [PSCustomObject]@{ Kind=$parts[0]; Key=Unescape-Field $parts[1]; Action=Unescape-Field $parts[2]; Arg1=Unescape-Field $parts[3]; Arg2=Unescape-Field $parts[4] }\n";
+    script = script + "  }\n";
+    script = script + "  return $items\n";
+    script = script + "}\n";
+    script = script + "function Parse-Commands() {\n";
+    script = script + "  if (!(Test-Path $CommandsPath)) { return @() }\n";
+    script = script + "  $items = @()\n";
+    script = script + "  foreach ($line in Get-Content $CommandsPath) {\n";
+    script = script + "    if ([string]::IsNullOrWhiteSpace($line)) { continue }\n";
+    script = script + "    $parts = $line -split '\\|~\\|', 2\n";
+    script = script + "    while ($parts.Count -lt 2) { $parts += '' }\n";
+    script = script + "    $items += [PSCustomObject]@{ command=Unescape-Field $parts[0]; description=Unescape-Field $parts[1] }\n";
+    script = script + "  }\n";
+    script = script + "  return $items\n";
+    script = script + "}\n";
+    script = script + "function Get-Offset() {\n";
+    script = script + "  if (Test-Path $OffsetPath) { return [int]((Get-Content $OffsetPath -Raw).Trim()) }\n";
+    script = script + "  return 0\n";
+    script = script + "}\n";
+    script = script + "function Set-Offset([int]$value) { Set-Content -Path $OffsetPath -Value $value -NoNewline }\n";
+    script = script + "function Api-Url($method) { return \"https://api.telegram.org/bot$Token/$method\" }\n";
+    script = script + "function Send-Text($chatId, $text, $parseMode='') {\n";
+    script = script + "  $body = @{ chat_id = [string]$chatId; text = [string]$text }\n";
+    script = script + "  if ($parseMode) { $body.parse_mode = $parseMode }\n";
+    script = script + "  Invoke-RestMethod -Uri (Api-Url 'sendMessage') -Method Post -Body $body | Out-Null\n";
+    script = script + "}\n";
+    script = script + "function Send-Photo($chatId, $filePath, $caption) {\n";
+    script = script + "  & curl.exe -s -X POST (Api-Url 'sendPhoto') -F \"chat_id=$chatId\" -F \"photo=@$filePath\" -F \"caption=$caption\" | Out-Null\n";
+    script = script + "}\n";
+    script = script + "function Send-Document($chatId, $filePath, $caption) {\n";
+    script = script + "  & curl.exe -s -X POST (Api-Url 'sendDocument') -F \"chat_id=$chatId\" -F \"document=@$filePath\" -F \"caption=$caption\" | Out-Null\n";
+    script = script + "}\n";
+    script = script + "function Answer-Callback($callbackId, $text='') {\n";
+    script = script + "  Invoke-RestMethod -Uri (Api-Url 'answerCallbackQuery') -Method Post -Body @{ callback_query_id = $callbackId; text = $text } | Out-Null\n";
+    script = script + "}\n";
+    script = script + "function Buttons-Json($spec) {\n";
+    script = script + "  $row = @()\n";
+    script = script + "  foreach ($chunk in ($spec -split ';')) {\n";
+    script = script + "    if ([string]::IsNullOrWhiteSpace($chunk)) { continue }\n";
+    script = script + "    $pair = $chunk -split '=>', 2\n";
+    script = script + "    if ($pair.Count -lt 2) { continue }\n";
+    script = script + "    $label = $pair[0].Trim()\n";
+    script = script + "    $value = $pair[1].Trim()\n";
+    script = script + "    if ($value.StartsWith('http://') -or $value.StartsWith('https://')) {\n";
+    script = script + "      $row += @{ text = $label; url = $value }\n";
+    script = script + "    } else {\n";
+    script = script + "      $row += @{ text = $label; callback_data = $value }\n";
+    script = script + "    }\n";
+    script = script + "  }\n";
+    script = script + "  return (@{ inline_keyboard = @(@($row)) } | ConvertTo-Json -Compress)\n";
+    script = script + "}\n";
+    script = script + "function Send-Buttons($chatId, $text, $spec) {\n";
+    script = script + "  $markup = Buttons-Json $spec\n";
+    script = script + "  & curl.exe -s -X POST (Api-Url 'sendMessage') --data-urlencode \"chat_id=$chatId\" --data-urlencode \"text=$text\" --data-urlencode \"reply_markup=$markup\" | Out-Null\n";
+    script = script + "}\n";
+    script = script + "function Sync-Commands() {\n";
+    script = script + "  $commands = Parse-Commands\n";
+    script = script + "  if ($commands.Count -eq 0) { return }\n";
+    script = script + "  $json = ($commands | ConvertTo-Json -Compress)\n";
+    script = script + "  Invoke-RestMethod -Uri (Api-Url 'setMyCommands') -Method Post -Body @{ commands = $json } | Out-Null\n";
+    script = script + "}\n";
+    script = script + "function Apply-Handler($handler, $chatId, $callbackId='') {\n";
+    script = script + "  if ($handler.Action -eq 'send') { Send-Text $chatId $handler.Arg1 }\n";
+    script = script + "  elseif ($handler.Action -eq 'html') { Send-Text $chatId $handler.Arg1 'HTML' }\n";
+    script = script + "  elseif ($handler.Action -eq 'markdown') { Send-Text $chatId $handler.Arg1 'MarkdownV2' }\n";
+    script = script + "  elseif ($handler.Action -eq 'photo') { Send-Photo $chatId $handler.Arg1 $handler.Arg2 }\n";
+    script = script + "  elseif ($handler.Action -eq 'document') { Send-Document $chatId $handler.Arg1 $handler.Arg2 }\n";
+    script = script + "  elseif ($handler.Action -eq 'buttons') { Send-Buttons $chatId $handler.Arg1 $handler.Arg2 }\n";
+    script = script + "  if ($callbackId) { Answer-Callback $callbackId '' }\n";
+    script = script + "}\n";
+    script = script + "Sync-Commands\n";
+    script = script + "Write-Host 'Telebot long polling is running. Press Ctrl+C to stop.'\n";
+    script = script + "while ($true) {\n";
+    script = script + "  if (Test-Path $StopPath) { Remove-Item $StopPath -Force; break }\n";
+    script = script + "  $offset = Get-Offset\n";
+    script = script + "  $handlers = Parse-Handlers\n";
+    script = script + "  try {\n";
+    script = script + "    $updates = Invoke-RestMethod -Uri (Api-Url ('getUpdates?offset=' + $offset + '&timeout=20')) -Method Get\n";
+    script = script + "    foreach ($update in $updates.result) {\n";
+    script = script + "      $next = [int]$update.update_id + 1\n";
+    script = script + "      if ($next -gt $offset) { $offset = $next }\n";
+    script = script + "      Set-Offset $offset\n";
+    script = script + "      if ($update.callback_query) {\n";
+    script = script + "        $data = [string]$update.callback_query.data\n";
+    script = script + "        $chatId = [string]$update.callback_query.message.chat.id\n";
+    script = script + "        $handler = $handlers | Where-Object { $_.Kind -eq 'callback' -and $_.Key -eq $data } | Select-Object -First 1\n";
+    script = script + "        if ($handler) { Apply-Handler $handler $chatId $update.callback_query.id }\n";
+    script = script + "        else { Answer-Callback $update.callback_query.id '' }\n";
+    script = script + "        continue\n";
+    script = script + "      }\n";
+    script = script + "      if ($update.message) {\n";
+    script = script + "        $chatId = [string]$update.message.chat.id\n";
+    script = script + "        $text = [string]$update.message.text\n";
+    script = script + "        if ($text.StartsWith('/')) {\n";
+    script = script + "          $command = ($text -split '\\s+', 2)[0]\n";
+    script = script + "          $handler = $handlers | Where-Object { $_.Kind -eq 'command' -and $_.Key -eq $command } | Select-Object -First 1\n";
+    script = script + "          if ($handler) { Apply-Handler $handler $chatId; continue }\n";
+    script = script + "        }\n";
+    script = script + "        $messageHandler = $handlers | Where-Object { $_.Kind -eq 'message' } | Select-Object -First 1\n";
+    script = script + "        if ($messageHandler) { Apply-Handler $messageHandler $chatId }\n";
+    script = script + "      }\n";
+    script = script + "    }\n";
+    script = script + "  } catch {\n";
+    script = script + "    Write-Host $_.Exception.Message\n";
+    script = script + "    Start-Sleep -Seconds 2\n";
+    script = script + "  }\n";
+    script = script + "}\n";
+    return script;
+}
+
+fn build_polling(root) {
+    var script_path = root + "/bot.ps1";
+    write(script_path, bot_host_script());
+    return script_path;
+}
+
+fn stop_polling(root) {
+    return write(root + "/stop.txt", "stop");
+}
+
+fn run_polling(root) {
+    var script_path = build_polling(root);
+    var command = "powershell.exe -ExecutionPolicy Bypass -File \"" + clean_cli_path(script_path) + "\"";
+    return run(command);
+}
