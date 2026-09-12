@@ -1,0 +1,8 @@
+{
+  "name": "telebot",
+  "version": "0.0.1",
+  "description": "Telegram bot helpers for RayQuiro built around curl.exe and the Bot API.",
+  "entry": "main.rq",
+  "author": "Raytolfas",
+  "dependencies": {}
+}
